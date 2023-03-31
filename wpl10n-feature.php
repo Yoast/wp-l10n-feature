@@ -3,26 +3,19 @@
  * Plugin Name: WP L10n Feature
  */
 
-add_filter( 'override_load_textdomain', function( $override, $domain, $mofile, $locale ) {
-	/**
-	 * Filters MO file path for loading translations for a specific text domain.
-	 *
-	 * @since 2.9.0
-	 *
-	 * @param string $mofile Path to the MO file.
-	 * @param string $domain Text domain. Unique identifier for retrieving translated strings.
-	 */
-	$mofile = apply_filters( 'load_textdomain_mofile', $mofile, $domain );
-
-	/**
-	 * Fires before the MO translation file is loaded.
-	 *
-	 * @since 2.9.0
-	 *
-	 * @param string $domain Text domain. Unique identifier for retrieving translated strings.
-	 * @param string $mofile Path to the .mo file.
-	 */
-	do_action( 'load_textdomain', $domain, $mofile );
+/**
+ * Get translations from a JSON file.
+ * This function does the following:
+ *     - If the file doesn't exist, create it from the .mo file.
+ *     - If the .mo file is newer than the .json file, regenerate the .json file.
+ *     - If the .json file exists, return the translations.
+ *     - If the .json file cannot be created, return false.
+ *
+ * @param string $domain Text domain. Unique identifier for retrieving translated strings.
+ * @param string $mofile Path to the MO file.
+ * @param string $locale The locale of the file.
+ */
+function wpl10n_get_translations( $domain, $mofile, $locale ) {
 
 	// TODO: If the file exists, check the date. If the date is older than the .mo file, regenerate the .json file.
 	$json_path = str_replace( '.mo', '.json', $mofile );
@@ -66,19 +59,41 @@ add_filter( 'override_load_textdomain', function( $override, $domain, $mofile, $
 			$json_content['locale_data']['messages'][ $key ] = $entry->translations;
 		}
 
-		// FIll-in the $translations variable so we can later use it to replace the translations.
-		$translations = $json_content['locale_data']['messages'][ $key ];
-
 		// Try to write the JSON file. If it fails, return false to fallback to the .mo file.
 		if ( ! $wp_filesystem->put_contents( $json_path, json_encode( $json_content, JSON_PRETTY_PRINT ) ) ) {
 			return false;
 		}
-	} else {
 
-		// Read the JSON file and save translations in the $translations variable.
-		$json_content = json_decode( file_get_contents( $json_path ), true );
-		$translations = $json_content['locale_data']['messages'];
+		return $json_content['locale_data']['messages'][ $key ];
 	}
+
+	// Read the JSON file and save translations in the $translations variable.
+	$json_content = json_decode( file_get_contents( $json_path ), true );
+	return $json_content['locale_data']['messages'];
+}
+
+add_filter( 'override_load_textdomain', function( $override, $domain, $mofile, $locale ) {
+	/**
+	 * Filters MO file path for loading translations for a specific text domain.
+	 *
+	 * @since 2.9.0
+	 *
+	 * @param string $mofile Path to the MO file.
+	 * @param string $domain Text domain. Unique identifier for retrieving translated strings.
+	 */
+	$mofile = apply_filters( 'load_textdomain_mofile', $mofile, $domain );
+
+	/**
+	 * Fires before the MO translation file is loaded.
+	 *
+	 * @since 2.9.0
+	 *
+	 * @param string $domain Text domain. Unique identifier for retrieving translated strings.
+	 * @param string $mofile Path to the .mo file.
+	 */
+	do_action( 'load_textdomain', $domain, $mofile );
+
+	$translations = wpl10n_get_translations( $domain, $mofile, $locale );
 
 	// Replace the translations with the ones from the JSON file for simple strings.
 	add_filter( "gettext_{$domain}", function( $translation, $text, $domain ) use ( $translations ) {
@@ -105,3 +120,4 @@ add_filter( 'override_load_textdomain', function( $override, $domain, $mofile, $
 
 	return true;
 }, 10, 4);
+
