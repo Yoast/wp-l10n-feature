@@ -14,6 +14,8 @@
  * @param string $domain Text domain. Unique identifier for retrieving translated strings.
  * @param string $mofile Path to the MO file.
  * @param string $locale The locale of the file.
+ *
+ * @return array|bool Array of translations or false if the JSON file cannot be created.
  */
 function wpl10n_get_translations( $domain, $mofile, $locale ) {
 
@@ -69,6 +71,16 @@ function wpl10n_get_translations( $domain, $mofile, $locale ) {
 
 	// Read the JSON file and save translations in the $translations variable.
 	$json_content = json_decode( file_get_contents( $json_path ), true );
+
+	$json_datetime = (int) $json_content['translation-revision-date'];
+	$mo_datetime   = filemtime( $mofile );
+
+	// If the .mo file is newer than the .json file, delete the .json file
+	// so it can be re-generated on the next pageload.
+	if ( $mo_datetime > $json_datetime ) {
+		$wp_filesystem->delete( $json_path );
+		return false;
+	}
 	return $json_content['locale_data']['messages'];
 }
 
@@ -94,6 +106,10 @@ add_filter( 'override_load_textdomain', function( $override, $domain, $mofile, $
 	do_action( 'load_textdomain', $domain, $mofile );
 
 	$translations = wpl10n_get_translations( $domain, $mofile, $locale );
+
+	if ( ! $translations ) {
+		return false;
+	}
 
 	// Replace the translations with the ones from the JSON file for simple strings.
 	add_filter( "gettext_{$domain}", function( $translation, $text, $domain ) use ( $translations ) {
