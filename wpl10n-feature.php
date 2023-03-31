@@ -72,12 +72,9 @@ function wpl10n_get_translations( $domain, $mofile, $locale ) {
 	// Read the JSON file and save translations in the $translations variable.
 	$json_content = json_decode( file_get_contents( $json_path ), true );
 
-	$json_datetime = (int) $json_content['translation-revision-date'];
-	$mo_datetime   = filemtime( $mofile );
-
 	// If the .mo file is newer than the .json file, delete the .json file
 	// so it can be re-generated on the next pageload.
-	if ( $mo_datetime > $json_datetime ) {
+	if ( filemtime( $mofile ) > (int) $json_content['translation-revision-date'] ) {
 		$wp_filesystem->delete( $json_path );
 		return false;
 	}
