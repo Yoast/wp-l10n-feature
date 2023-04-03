@@ -9,10 +9,21 @@
 class WPL10n_Feature {
 
 	/**
+	 * An array of domains and their translations.
+	 *
+	 * @var array
+	 */
+	private $translations = array();
+
+	/**
 	 * Class constructor.
 	 */
 	public function __construct() {
 		add_filter( 'override_load_textdomain', array( $this, 'override_load_textdomain' ), 10, 4);
+		add_filter( 'gettext', array( $this, 'override_gettext' ), 10, 3 );
+		add_filter( 'gettext_with_context', array( $this, 'override_gettext_with_context' ), 10, 4 );
+		// TODO: Handle using the $plural expression.
+		add_filter( 'ngettext', array( $this, 'override_ngettext' ), 10, 5 );
 	}
 
 	/**
@@ -29,7 +40,7 @@ class WPL10n_Feature {
 	 *
 	 * @return array|bool Array of translations or false if the JSON file cannot be created.
 	 */
-	function get_translations_from_file( $domain, $mofile, $locale ) {
+	public function get_translations_from_file( $domain, $mofile, $locale ) {
 
 		// TODO: If the file exists, check the date. If the date is older than the .mo file, regenerate the .json file.
 		$json_path = str_replace( '.mo', '.json', $mofile );
@@ -74,6 +85,7 @@ class WPL10n_Feature {
 			}
 
 			// Try to write the JSON file. If it fails, return false to fallback to the .mo file.
+			// @TODO: Remove the JSON_PRETTY_PRINT flag to generate minified JSON files.
 			if ( ! $wp_filesystem->put_contents( $json_path, json_encode( $json_content, JSON_PRETTY_PRINT ) ) ) {
 				return false;
 			}
@@ -103,7 +115,7 @@ class WPL10n_Feature {
 	 *
 	 * @return bool True if the translations were loaded from the JSON file, false otherwise.
 	 */
-	function override_load_textdomain( $override, $domain, $mofile, $locale ) {
+	public function override_load_textdomain( $override, $domain, $mofile, $locale ) {
 		/**
 		 * Filters MO file path for loading translations for a specific text domain.
 		 *
@@ -130,33 +142,83 @@ class WPL10n_Feature {
 			return false;
 		}
 
-		// Replace the translations with the ones from the JSON file for simple strings.
-		add_filter( "gettext_{$domain}", function( $translation, $text, $domain ) use ( $translations ) {
-			if ( ! empty( $translations[ $text ] ) ) {
-				return $translations[ $text ][0];
-			}
-			return $translation;
-		}, 10, 3 );
+		$this->translations[ $domain ] = isset( $this->translations[ $domain ] )
+			? $this->translations[ $domain ]
+			: array();
 
-		// Replace the translations with the ones from the JSON file for strings with context.
-		add_filter( "gettext_with_context_{$domain}", function( $translation, $text, $context, $domain ) use ( $translations ) {
-			if ( ! empty( $translations[ "$context$text" ] ) ) {
-				return $translations[ $text ][0];
-			}
-			return $translation;
-		}, 10, 4 );
-
-
-		// Replace the translations with the ones from the JSON file for strings with plurals.
-		// TODO: Handle using the $plural expression.
-		add_filter( "ngettext_{$domain}", function( $translation, $single, $plural, $number, $domain ) use ( $translations ) {
-			if ( ! empty( $translations[ $single ] ) ) {
-				return $translations[ $single ][ $number == 1 ? 0 : 1 ];
-			}
-			return $translation;
-		}, 10, 5 );
+		$this->translations[ $domain ] = array_merge(
+			$this->translations[ $domain ],
+			$this->get_translations_from_file( $domain, $mofile, $locale )
+		);
 
 		return true;
+	}
+
+	/**
+	 * Hooks in the `gettext` filter to load translations from a JSON file.
+	 *
+	 * @param string $translation Translated text.
+	 * @param string $text        Text to translate.
+	 * @param string $domain      Text domain. Unique identifier for retrieving translated strings.
+	 *
+	 * @return string Translated text.
+	 */
+	public function override_gettext( $translation, $text, $domain ) {
+		if ( ! isset( $this->translations[ $domain ] ) ) {
+			return $translation;
+		}
+
+		if ( ! empty( $this->translations[ $domain ][ $text ] ) ) {
+			return $this->translations[ $domain ][ $text ][0];
+		}
+
+		return $translation;
+	}
+
+	/**
+	 * Hooks in the `gettext_with_context` filter to load translations from a JSON file.
+	 *
+	 * @param string $translation Translated text.
+	 * @param string $text        Text to translate.
+	 * @param string $context     Context information for the translators.
+	 * @param string $domain      Text domain. Unique identifier for retrieving translated strings.
+	 *
+	 * @return string Translated text.
+	 */
+	public function override_gettext_with_context( $translation, $text, $context, $domain ) {
+		if ( ! isset( $this->translations[ $domain ] ) ) {
+			return $translation;
+		}
+
+		if ( ! empty( $this->translations[ $domain ][ "$context$text" ] ) ) {
+			return $this->translations[ $domain ][ "$context$text" ][0];
+		}
+
+		return $translation;
+	}
+
+	/**
+	 * Hooks in the `ngettext` filter to load translations from a JSON file.
+	 *
+	 * @param string $translation Translated text.
+	 * @param string $single      The text to be translated.
+	 * @param string $plural      The plural form of the text to be translated.
+	 * @param int    $number      The number to use to find the translation for the
+	 * 						      respective plural form.
+	 * @param string $domain      Text domain. Unique identifier for retrieving translated strings.
+	 *
+	 * @return string Translated text.
+	 */
+	public function override_ngettext( $translation, $single, $plural, $number, $domain ) {
+		if ( ! isset( $this->translations[ $domain ] ) ) {
+			return $translation;
+		}
+
+		if ( ! empty( $this->translations[ $domain ][ $single ] ) ) {
+			return $this->translations[ $domain ][ $single ][ $number == 1 ? 0 : 1 ];
+		}
+
+		return $translation;
 	}
 }
 
