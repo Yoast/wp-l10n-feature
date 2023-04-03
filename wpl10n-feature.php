@@ -135,6 +135,7 @@ class WPL10n_Feature {
 			if ( ! empty( $translations[ $text ] ) ) {
 				return $translations[ $text ][0];
 			}
+			return $translation;
 		}, 10, 3 );
 
 		// Replace the translations with the ones from the JSON file for strings with context.
@@ -142,6 +143,7 @@ class WPL10n_Feature {
 			if ( ! empty( $translations[ "$context$text" ] ) ) {
 				return $translations[ $text ][0];
 			}
+			return $translation;
 		}, 10, 4 );
 
 
@@ -151,6 +153,7 @@ class WPL10n_Feature {
 			if ( ! empty( $translations[ $single ] ) ) {
 				return $translations[ $single ][ $number == 1 ? 0 : 1 ];
 			}
+			return $translation;
 		}, 10, 5 );
 
 		return true;
